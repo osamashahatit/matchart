@@ -1,0 +1,18 @@
+[project]
+name = "matchart"
+version = "0.1.0"
+description = "Simplified charting library built on top of matplotlib."
+readme = "README.md"
+authors = [{ name = "Osama Shahatit", email = "osamaa.shahatit@gmail.com" }]
+requires-python = ">=3.13"
+dependencies = ["matplotlib>=3.10.7", "numpy>=2.3.4", "pandas>=2.3.3"]
+
+[project.scripts]
+matchart = "matchart:main"
+
+[build-system]
+requires = ["uv_build>=0.9.7,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["ipykernel>=7.1.0"]

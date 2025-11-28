@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+.env
+
+# VS code settings
+.vscode/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Jupyter autosave / temp files
+*.ipynb.tmp
+*.ipynb_save
+
+# Optional: ignore all notebooks except in a specific folder
+*.ipynb
+!notebooks/**/*.ipynb
+
+# Temporary folders
+test/
+
+# macOS system files
+.DS_Store
