@@ -37,7 +37,12 @@ class BarFactory:
 
         data_container = Data(df).bar(properties=data_properties)
 
-        bar_styler = BarStyler(ax=self.ax, fig=self.fig)
+        bar_styler = BarStyler(
+            ax=self.ax,
+            fig=self.fig,
+            horizontal=bar_properties.switch_axis,
+            legend=data_properties.legend,
+        )
 
         BarRenderer(
             ax=self.ax,
