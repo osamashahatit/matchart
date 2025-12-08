@@ -115,15 +115,16 @@ class FramedDataLabeler:
             align=self.align,
         ).resolve()
 
-        text = self.ax.text(
-            x,
-            y,
-            self.formatter.format(label),
-            ha=h_align,
-            va=v_align,
+        self.ax.annotate(
+            text=self.formatter.format(label),
+            xy=(x, y),
             fontproperties=self.label.font,
             fontsize=self.label.size,
             color=self.label.color,
+            ha=h_align,
+            va=v_align,
+            xytext=(0.0, 0.0),
+            xycoords="data",
+            textcoords="offset points",
+            gid=self.gid,
         )
-        if self.gid is not None:
-            text.set_gid(self.gid)
