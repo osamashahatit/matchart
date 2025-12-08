@@ -22,6 +22,7 @@ class BarStyler:
     def bars(self) -> BarStyleDrawer:
         return BarStyleDrawer(
             ax=self.ax,
+            fig=self.fig,
             horizontal=self.horizontal,
             legend=self.legend,
         )
