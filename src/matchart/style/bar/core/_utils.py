@@ -1,8 +1,10 @@
 from itertools import cycle
-from typing import Iterable, Literal
+from typing import Iterable, Literal, TypeVar
 from matplotlib.axes import Axes
 from matplotlib.patches import Patch, Rectangle
 from matplotlib.container import BarContainer
+
+T = TypeVar("T")
 
 
 class BarStyleHelper:
@@ -35,7 +37,7 @@ class BarStyleHelper:
                     legend_labels.append(legend_label)
         return legend_labels
 
-    def validate_tick_entry(self, dict: dict[str, str]) -> None:
+    def validate_tick_entry(self, dict: dict[str, T]) -> None:
         """Validate that dictionary keys match tick labels."""
 
         tick_labels = self.get_tick_labels()
@@ -48,7 +50,7 @@ class BarStyleHelper:
                 f"Available tick labels are: {tick_labels}"
             )
 
-    def validate_legend_entry(self, dict: dict[str, str]) -> None:
+    def validate_legend_entry(self, dict: dict[str, T]) -> None:
         """Validate that dictionary keys match legend labels."""
 
         legend_labels = self.get_legend_labels()
@@ -94,7 +96,7 @@ class BarPatchGenerator:
                 for patch in container.patches:
                     yield patch
 
-    def cycle(self, property: list[str]) -> Iterable[tuple[Patch, str]]:
+    def cycle(self, property: list[T]) -> Iterable[tuple[Patch, T]]:
         """Generate patches with cycled properties."""
 
         property_cycle = cycle(property)
@@ -104,7 +106,7 @@ class BarPatchGenerator:
                     prop = next(property_cycle)
                     yield patch, prop
 
-    def map_tick(self, property: dict[str, str]) -> Iterable[tuple[Patch, str]]:
+    def map_tick(self, property: dict[str, T]) -> Iterable[tuple[Patch, T]]:
         """Generate patches with properties mapped to tick labels."""
 
         tick_labels = self.help.get_tick_labels()
@@ -117,7 +119,7 @@ class BarPatchGenerator:
                         if prop is not None:
                             yield patch, prop
 
-    def map_legend(self, property: dict[str, str]) -> Iterable[tuple[Patch, str]]:
+    def map_legend(self, property: dict[str, T]) -> Iterable[tuple[Patch, T]]:
         """Generate patches with properties mapped to legend labels."""
 
         for container in self.ax.containers:
