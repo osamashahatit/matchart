@@ -41,7 +41,11 @@ class LineFactory:
             running_total=running_total,
         )
 
-        line_styler = LineStyler(ax=self.ax, fig=self.fig)
+        line_styler = LineStyler(
+            ax=self.ax,
+            fig=self.fig,
+            legend=data_properties.legend,
+        )
 
         LineRenderer(
             ax=self.ax,

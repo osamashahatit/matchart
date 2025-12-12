@@ -84,7 +84,7 @@ class StandardSingleLineDrawer(StandardLineDrawerABC):
             self.ax.fill_between(
                 self.data.tick_labels,
                 self.data.values,
-                alpha=0.3,
+                alpha=0.1,
             )
 
 
@@ -102,11 +102,12 @@ class StandardMultiLineDrawer(StandardLineDrawerABC):
                 label=str(label),
             )
             if self.properties.area:
-                self.ax.fill_between(
+                area = self.ax.fill_between(
                     self.data.tick_labels,
                     value,
-                    alpha=0.3,
+                    alpha=0.1,
                 )
+                setattr(area, "_legend_label", str(label))
 
 
 class StandardLineDrawerSelector:
