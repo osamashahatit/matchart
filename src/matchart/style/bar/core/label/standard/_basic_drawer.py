@@ -44,7 +44,6 @@ class BDL_Bar_AlignProperties:
 
 
 class BDL_Bar:
-
     def __init__(
         self,
         ax: Axes,
@@ -66,7 +65,6 @@ class BDL_Bar:
         self.align = align
 
     def draw(self) -> None:
-
         for patch in self.patches:
             if isinstance(patch, Rectangle):
                 patch_label = self.help.get_patch_value(patch=patch)
@@ -110,7 +108,6 @@ class BDL_Bar:
 
 
 class BDL_Bar_Drawer:
-
     def __init__(self, ax: Axes, horizontal: bool) -> None:
         self.ax = ax
         self.horizontal = horizontal
@@ -153,7 +150,7 @@ class BDL_Bar_Drawer:
 
         Returns
         -------
-        BDL_BarDrawer
+        BDL_Bar_Drawer
             The current instance for method chaining.
         """
 
@@ -185,7 +182,7 @@ class BDL_Bar_Drawer:
 
         Returns
         -------
-        BDL_BarDrawer
+        BDL_Bar_Drawer
             The current instance for method chaining.
         """
 
@@ -221,7 +218,7 @@ class BDL_Bar_Drawer:
 
         Returns
         -------
-        BDL_BarDrawer
+        BDL_Bar_Drawer
             The current instance for method chaining.
         """
 

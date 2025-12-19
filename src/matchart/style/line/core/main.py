@@ -5,6 +5,7 @@ from matplotlib.figure import Figure
 from ._line import LineDrawer
 from ._area import AreaDrawer
 from ._marker import MarkerDrawer
+from ._label import LineLabelDrawer
 
 
 @dataclass(frozen=True)
@@ -33,3 +34,7 @@ class LineStyleDrawer:
             ax=self.ax,
             legend=self.legend,
         )
+
+    @property
+    def label(self) -> LineLabelDrawer:
+        return LineLabelDrawer(ax=self.ax, fig=self.fig)

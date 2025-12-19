@@ -37,7 +37,6 @@ class LineGenerator:
 
     def __init__(self, ax: Axes) -> None:
         self.ax = ax
-        self.help = LineStyleHelper(ax=self.ax)
 
     def standard(self) -> Iterable[Line2D]:
         """Generate standard lines without any properties."""
@@ -58,7 +57,6 @@ class AreaGenerator:
 
     def __init__(self, ax: Axes) -> None:
         self.ax = ax
-        self.help = LineStyleHelper(ax=self.ax)
 
     def standard(self) -> Iterable[FillBetweenPolyCollection]:
         """Generate area fills without any properties."""

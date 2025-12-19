@@ -31,7 +31,7 @@ class BarStyleDrawer:
         )
 
     @property
-    def label(self) -> "BarLabelDrawer":
+    def label(self) -> BarLabelDrawer:
         return BarLabelDrawer(
             ax=self.ax,
             fig=self.fig,
