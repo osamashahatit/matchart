@@ -1,4 +1,7 @@
+"""Style axes titles."""
+
 from typing import Literal
+
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
@@ -8,8 +11,14 @@ type Position = Literal["center", "left", "right"]
 
 
 class TitleDrawer:
+    """Draw and style an Axes title."""
 
     def __init__(self, ax: Axes, fig: Figure) -> None:
+        """
+        Args:
+            ax (Axes): Axes whose title will be set/styled.
+            fig (Figure): Figure used for points-based offset transforms.
+        """
         self.ax = ax
         self.fig = fig
 
@@ -23,28 +32,27 @@ class TitleDrawer:
         pad: float | None = None,
         x_offset: float | None = None,
     ) -> None:
-        """
-        Draw and style the title of the Axes.
+        """Set and style the Axes title text.
 
-        Parameters
-        ----------
-        text : str
-            The title text to be displayed.
-        font : FontProperties | str | None. Default is None
-            The font for the title text.
-        size : int | None. Default is None
-            The font size for the title text.
-        color : str | None. Default is None
-            The color of the title text.
-        position : {"center", "left", "right"} | None. Default is None.
-            The position of the title.
-        pad : float | None. Default is None
-            The padding between the title and the Axes.
-        x_offset : float | None. Default is None
-            The offset of the title along the x-axis.
-        """
+        Args:
+            text (str): Title text to display.
+            font (FontProperties | str | None): Font configuration for the
+                title. When provided as a string, it is passed through to
+                Text.set_fontproperties(). A common usage is a font family
+                name (e.g., "DejaVu Sans").
+            size (int | None): Font size in points.
+            color (str | None): Title text color.
+            position (Position | None): Title alignment on the Axes.
+                Options: "center", "left", "right".
+            pad (float | None): Additional vertical offset in points applied
+                via a transform (positive moves up).
+            x_offset (float | None): Additional horizontal offset in points
+                applied via a transform (positive moves right).
 
-        title = self.ax.set_title(label=text, loc=position)
+        Returns:
+            None: The Axes title Text artist is modified in place.
+        """
+        title = self.ax.set_title(label=text, loc=position)  # type:ignore
 
         if font is not None:
             title.set_fontproperties(font)
@@ -54,6 +62,8 @@ class TitleDrawer:
             title.set_color(color)
 
         if pad is not None or x_offset is not None:
+            # Use a points-based transform offset so layout is consistent
+            # regardless of data limits and figure size.
             offset_transform = offset_copy(
                 title.get_transform(),
                 fig=self.fig,

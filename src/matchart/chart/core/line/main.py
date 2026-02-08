@@ -1,5 +1,8 @@
-import pandas as pd
+"""Build line charts by wiring data preparation, rendering, and styling."""
+
 from dataclasses import dataclass
+
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
@@ -12,6 +15,17 @@ from .core.main import LineProperties, LineRenderer
 
 @dataclass(frozen=True)
 class LineContainer:
+    """Bundle the objects produced when building a line chart.
+
+    Attributes:
+        ax (Axes): Target axes containing the rendered line artists.
+        fig (Figure): Figure associated with the axes.
+        data_container (DataContainer): Prepared/pivoted data and metadata
+            used to render the lines.
+        line_properties (LineProperties): Rendering configuration used by
+            LineRenderer.
+        line_styler (LineStyler): Styling facade bound to the rendered chart.
+    """
 
     ax: Axes
     fig: Figure
@@ -21,9 +35,14 @@ class LineContainer:
 
 
 class LineFactory:
-    """Orchestrates line chart modules."""
+    """Orchestrate line chart modules."""
 
     def __init__(self, ax: Axes, fig: Figure) -> None:
+        """
+        Args:
+            ax (Axes): Target axes that will receive line artists.
+            fig (Figure): Figure associated with the axes.
+        """
         self.ax = ax
         self.fig = fig
 
@@ -34,8 +53,29 @@ class LineFactory:
         line_properties: LineProperties,
         running_total: bool,
     ) -> LineContainer:
-        """Build line chart with properties."""
+        """Build a line chart and return a bundle of the created objects.
 
+        This method prepares line chart data, renders lines onto the Axes, and
+        constructs a LineStyler configured for follow-up styling.
+
+        Args:
+            df (pd.DataFrame): Source data used to build the chart.
+            data_properties (DataProperties): Data configuration used by
+                Data(...).line(...), including any legend/grouping metadata.
+            line_properties (LineProperties): Rendering configuration used by
+                LineRenderer.
+            running_total (bool): Whether to compute a running total during
+                data preparation (delegated to Data(df).line).
+
+        Returns:
+            LineContainer: Bundle containing the Axes/Figure plus the created
+            DataContainer, LineProperties, and LineStyler.
+
+        Notes:
+            - This method mutates the provided Axes by adding line artists.
+            - It does not return the Matplotlib artists directly; access them
+              via the Axes (e.g., ax.lines).
+        """
         data_container = Data(df).line(
             properties=data_properties,
             running_total=running_total,

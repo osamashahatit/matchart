@@ -1,182 +1,305 @@
-import pandas as pd
-from typing import Literal
-from dataclasses import dataclass
+"""Flexible sorters for pivoted chart data.
+
+Charts built on pivoted pandas DataFrames often need consistent and
+configurable ordering of rows or columns. Depending on the chart, users
+may want to sort explicitly by a given label order, alphabetically by
+labels, or by aggregated values. This module encapsulates those concerns
+behind small, composable objects so higher-level chart code can
+request sorting declaratively without embedding pandas-specific logic.
+"""
+
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Literal
 
+import pandas as pd
 
-type SortMethod = Literal["asc", "desc"]
+type SortDirection = Literal["asc", "desc"]
 type SortBy = Literal["label", "value"]
 type SortOn = Literal["index", "columns"]
-type SortTuple = tuple[SortMethod, SortBy]
+type SortTuple = tuple[SortDirection, SortBy]
 type SortList = list[str | int]
-type SortType = SortList | SortTuple
+type SortSpec = SortList | SortTuple
 
 
 @dataclass(frozen=True)
 class SortConfiguration:
-    """Configuration for sorting operations."""
+    """
+    This class converts user-facing sort specifications into a structured
+    form that sorters can consume reliably.
+    """
 
-    order: SortList | None = None
-    method: SortMethod | None = None
+    sort_list: SortList | None = None
+    direction: SortDirection | None = None
     sort_by: SortBy | None = None
     ascending: bool | None = None
 
     @classmethod
-    def from_list(cls, sort: SortList) -> "SortConfiguration":
-        """Create SortConfiguration from a list."""
+    def from_list(cls, sort_list: SortList) -> "SortConfiguration":
+        """Create a sort configuration from an explicit order list.
 
-        return cls(order=sort)
+        Args:
+            sort_list (SortList): Explicit ordering of labels.
+
+        Returns:
+            SortConfiguration: Configuration with explicit order set.
+        """
+        return cls(sort_list=sort_list)
 
     @classmethod
     def from_tuple(cls, sort: SortTuple) -> "SortConfiguration":
-        """Create SortConfiguration from a tuple."""
+        """Create a sort configuration from a (direction, sort_by) tuple.
 
-        method, sort_by = sort
-        ascending = method == "asc"
-        return cls(method=method, sort_by=sort_by, ascending=ascending)
+        Args:
+            sort (SortTuple): Tuple describing sort direction and basis.
+
+        Returns:
+            SortConfiguration: Parsed configuration with ascending flag set.
+
+        Raises:
+            ValueError: If tuple length is invalid or contains invalid values.
+        """
+        if len(sort) != 2:
+            raise ValueError(f"Sort tuple must have exactly 2 elements, got: {sort}")
+
+        direction, sort_by = sort
+
+        if direction not in ("asc", "desc"):
+            raise ValueError(
+                f"Invalid direction: {direction}. Must be 'asc' or 'desc'."
+            )
+
+        if sort_by not in ("label", "value"):
+            raise ValueError(f"Invalid sort_by: {sort_by}. Must be 'label' or 'value'.")
+
+        ascending = direction == "asc"
+        return cls(direction=direction, sort_by=sort_by, ascending=ascending)
 
 
-class SortStrategyABC(ABC):
-    """Abstract base class for sorting strategies."""
+class SorterBase(ABC):
+    """Define the interface for pivot sorters."""
 
     def __init__(self, pivot: pd.DataFrame, sort_on: SortOn) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+            sort_on (SortOn): Whether to sort on index or columns.
+        """
         self.pivot = pivot
         self.sort_on = sort_on
 
     @abstractmethod
     def sort(self) -> pd.DataFrame:
-        """Sort the pivot DataFrame."""
+        """Sort the pivot DataFrame and return the result."""
         ...
 
 
-class ExplicitOrderSortStrategy(SortStrategyABC):
-    """Sort by explicit order of labels."""
+class ExplicitSorter(SorterBase):
+    """Sort pivot data using an explicit label order."""
 
-    def __init__(self, pivot: pd.DataFrame, sort_on: SortOn, order: SortList) -> None:
+    def __init__(
+        self,
+        pivot: pd.DataFrame,
+        sort_on: SortOn,
+        sort_list: SortList,
+    ) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+            sort_on (SortOn): Whether to sort index or columns.
+            sort_list (SortList): Explicit label order.
+        """
         self.pivot = pivot
         self.sort_on = sort_on
-        self.order = order
+        self.sort_list = sort_list
 
     def sort(self) -> pd.DataFrame:
+        """Apply explicit ordering to index or columns.
 
+        Returns:
+            pd.DataFrame: Reindexed DataFrame following the given order.
+
+        Raises:
+            ValueError: If labels are not found in index or columns.
+            ValueError: If sort_on is not "index" or "columns".
+        """
         if self.sort_on == "index":
-            return self.pivot.reindex(index=self.order)
-        elif self.sort_on == "columns":
-            return self.pivot.reindex(columns=self.order)
-        else:
-            raise ValueError("sort_on must be either 'index' or 'columns'.")
+            missing = set(self.sort_list) - set(self.pivot.index)
+            if missing:
+                raise ValueError(f"Labels not found in index: {missing}")
+            return self.pivot.reindex(index=self.sort_list)
+
+        if self.sort_on == "columns":
+            missing = set(self.sort_list) - set(self.pivot.columns)
+            if missing:
+                raise ValueError(f"Labels not found in columns: {missing}")
+            return self.pivot.reindex(columns=self.sort_list)
+
+        raise ValueError("sort_on must be either 'index' or 'columns'.")
 
 
-class LabelSortStrategy(SortStrategyABC):
-    """Sort by index or columns labels."""
+class LabelSorter(SorterBase):
+    """Sort pivot data by index or column labels."""
 
     def __init__(self, pivot: pd.DataFrame, sort_on: SortOn, ascending: bool) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+            sort_on (SortOn): Whether to sort index or columns.
+            ascending (bool): Sort direction.
+        """
         self.pivot = pivot
         self.sort_on = sort_on
         self.ascending = ascending
 
     def sort(self) -> pd.DataFrame:
+        """Sort by labels on the specified axis.
 
+        Returns:
+            pd.DataFrame: Sorted DataFrame.
+        """
         return self.pivot.sort_index(
-            axis=0 if self.sort_on == "index" else 1, ascending=self.ascending
+            axis=0 if self.sort_on == "index" else 1,
+            ascending=self.ascending,
         )
 
 
-class ValueSortStrategy(SortStrategyABC):
-    """Sort by the sum of values across the opposite axis."""
+class ValueSorter(SorterBase):
+    """Sort pivot data by aggregated values across the opposite axis."""
 
     def __init__(self, pivot: pd.DataFrame, sort_on: SortOn, ascending: bool) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+            sort_on (SortOn): Whether to sort index or columns.
+            ascending (bool): Sort direction.
+        """
         self.pivot = pivot
         self.sort_on = sort_on
         self.ascending = ascending
 
     def sort(self) -> pd.DataFrame:
+        """Sort by row or column totals.
 
+        Returns:
+            pd.DataFrame: Sorted DataFrame.
+
+        Raises:
+            ValueError: If sort_on is not "index" or "columns".
+        """
+        # Sum across the opposite axis to compute totals
         axis = 1 if self.sort_on == "index" else 0
         totals = self.pivot.sum(axis=axis, numeric_only=True)
         sorted_index = totals.sort_values(ascending=self.ascending).index
 
         if self.sort_on == "index":
             return self.pivot.reindex(index=sorted_index)
-        elif self.sort_on == "columns":
+
+        if self.sort_on == "columns":
             return self.pivot.reindex(columns=sorted_index)
-        else:
-            raise ValueError("sort_on must be either 'index' or 'columns'.")
+
+        raise ValueError("sort_on must be either 'index' or 'columns'.")
 
 
-class SortStrategySelector:
-    """Select sorting strategy based on configuration."""
+class SorterSelector:
+    """Select sorter based on sort specifications."""
 
-    @staticmethod
-    def get_config(sort: SortType) -> SortConfiguration:
-        """Get SortConfiguration from the sort specification."""
+    def __init__(self, pivot: pd.DataFrame, sort: SortSpec) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+            sort (SortSpec): Either an explicit order list or a tuple
+                describing direction and basis.
+        """
+        self.pivot = pivot
+        self.sort = sort
 
-        if isinstance(sort, list):
-            return SortConfiguration.from_list(sort)
-        return SortConfiguration.from_tuple(sort)
+    def select(self, sort_on: SortOn) -> SorterBase:
+        """Get the appropriate sorter.
 
-    @staticmethod
-    def get_strategy(
-        sort_on: SortOn,
-        pivot: pd.DataFrame,
-        config: SortConfiguration,
-    ) -> SortStrategyABC:
-        """Get SortStrategy based on SortConfiguration."""
+        Args:
+            sort_on (SortOn): Whether to sort index or columns.
 
-        if config.order is not None:
-            return ExplicitOrderSortStrategy(
-                order=config.order,
-                pivot=pivot,
+        Returns:
+            SorterBase.
+
+        Raises:
+            ValueError: If the configuration cannot be resolved.
+        """
+        # parse user-facing spec into normalized config
+        config = (
+            SortConfiguration.from_list(self.sort)
+            if isinstance(self.sort, list)
+            else SortConfiguration.from_tuple(self.sort)
+        )
+
+        if config.sort_list is not None:
+            return ExplicitSorter(
+                sort_list=config.sort_list,
+                pivot=self.pivot,
                 sort_on=sort_on,
             )
+
         if config.ascending is not None and config.sort_by is not None:
             if config.sort_by == "label":
-                return LabelSortStrategy(
+                return LabelSorter(
                     ascending=config.ascending,
-                    pivot=pivot,
+                    pivot=self.pivot,
                     sort_on=sort_on,
                 )
+
             if config.sort_by == "value":
-                return ValueSortStrategy(
+                return ValueSorter(
                     ascending=config.ascending,
-                    pivot=pivot,
+                    pivot=self.pivot,
                     sort_on=sort_on,
                 )
+
         raise ValueError("Invalid sort configuration.")
 
 
 class PivotSorter:
-    """Sort pivot DataFrame by index or columns using various sorting strategies."""
+    """Sort pivot DataFrames by index or columns."""
 
     def __init__(self, pivot: pd.DataFrame) -> None:
+        """
+        Args:
+            pivot (pd.DataFrame): Pivoted DataFrame to sort.
+        """
         self.pivot = pivot
 
-    def sort_index(self, sort: SortType | None) -> pd.DataFrame:
-        """Sort DataFrame index."""
+    def sort_index(self, sort: SortSpec | None) -> pd.DataFrame:
+        """Sort the DataFrame index.
 
-        if sort is None:
-            return self.pivot
+        Args:
+            sort (SortSpec | None): Sort specification or None to skip
+                sorting.
 
-        sort_selector = SortStrategySelector()
-        config = sort_selector.get_config(sort=sort)
-        strategy = sort_selector.get_strategy(
-            sort_on="index",
-            pivot=self.pivot,
-            config=config,
-        )
-        return strategy.sort()
+        Returns:
+            pd.DataFrame: Sorted or original DataFrame.
+        """
+        if sort is not None:
+            sorter = SorterSelector(
+                pivot=self.pivot,
+                sort=sort,
+            ).select(sort_on="index")
+            return sorter.sort()
+        return self.pivot
 
-    def sort_columns(self, sort: SortType | None) -> pd.DataFrame:
-        """Sort DataFrame columns."""
+    def sort_columns(self, sort: SortSpec | None) -> pd.DataFrame:
+        """Sort the DataFrame columns.
 
-        if sort is None:
-            return self.pivot
+        Args:
+            sort (SortSpec | None): Sort specification or None to skip
+                sorting.
 
-        sort_selector = SortStrategySelector()
-        config = sort_selector.get_config(sort=sort)
-        strategy = sort_selector.get_strategy(
-            sort_on="columns",
-            pivot=self.pivot,
-            config=config,
-        )
-        return strategy.sort()
+        Returns:
+            pd.DataFrame: Sorted or original DataFrame.
+        """
+        if sort is not None:
+            sorter = SorterSelector(
+                pivot=self.pivot,
+                sort=sort,
+            ).select(sort_on="columns")
+            return sorter.sort()
+        return self.pivot

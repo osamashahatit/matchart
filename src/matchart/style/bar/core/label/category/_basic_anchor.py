@@ -1,9 +1,11 @@
-from typing import Literal
+"""Compute anchor points for bar chart category basic data labels"""
+
 from dataclasses import dataclass
+from typing import Literal
+
 from matplotlib.axes import Axes
 
 from ._utils import CDL_Bar_Bounds
-
 
 type CBDL_HBar_VAlign = Literal["top", "bottom", "center"]
 type CBDL_VBar_HAlign = Literal["left", "right", "center"]
@@ -11,6 +13,8 @@ type CBDL_VBar_HAlign = Literal["left", "right", "center"]
 
 @dataclass(frozen=True)
 class CBDL_Bar_Anchor:
+    """Represent a category label anchor and resolved alignments."""
+
     x: float
     y: float
     h_align: CBDL_VBar_HAlign
@@ -18,20 +22,36 @@ class CBDL_Bar_Anchor:
 
 
 class CBDL_HBar_Anchor:
+    """Compute category label anchors for horizontal bar charts."""
 
     def __init__(self, ax: Axes, bounds: CDL_Bar_Bounds):
+        """
+        Args:
+            ax (Axes): Target axes used to read view limits.
+            bounds (CDL_Bar_Bounds): Aggregate category span used for y
+                positioning.
+        """
         self.ax = ax
         self.bounds = bounds
 
     def get_x(self) -> float:
-        """Get the anchor point X max limit coordinate."""
+        """Return the x coordinate at the right edge of the current view.
 
-        xlim_max = self.ax.get_xlim()[1]
-        return xlim_max
+        Returns:
+            float: ax.get_xlim()[1].
+        """
+        return self.ax.get_xlim()[1]
 
     def get_y(self, v_align: CBDL_HBar_VAlign) -> tuple[float, CBDL_HBar_VAlign]:
-        """Get the anchor point Y coordinate and vertical alignment."""
+        """Return the y coordinate and resolved v_align for the category.
 
+        Args:
+            v_align (CBDL_HBar_VAlign): Vertical alignment selection.
+                Options: "top", "bottom", "center".
+
+        Returns:
+            tuple[float, CBDL_HBar_VAlign]: (y, resolved_v_align).
+        """
         options: dict[CBDL_HBar_VAlign, tuple[float, CBDL_HBar_VAlign]] = {
             "top": (self.bounds.max, "top"),
             "bottom": (self.bounds.min, "bottom"),
@@ -40,21 +60,47 @@ class CBDL_HBar_Anchor:
         return options[v_align]
 
     def anchor(self, v_align: CBDL_HBar_VAlign) -> CBDL_Bar_Anchor:
+        """Compute the category label anchor for a horizontal bar chart.
 
-        xlim_max = self.get_x()
-        y, va = self.get_y(v_align)
-        return CBDL_Bar_Anchor(x=xlim_max, y=y, h_align="right", v_align=va)
+        Args:
+            v_align (CBDL_HBar_VAlign): Vertical alignment selection.
+                Options: "top", "bottom", "center".
+
+        Returns:
+            CBDL_Bar_Anchor: Anchor coordinate plus alignment metadata.
+
+        Notes:
+            Horizontal category anchors always use h_align="right" to align
+            labels against the right plot edge.
+        """
+        x_max = self.get_x()
+        y, v_align = self.get_y(v_align)
+        return CBDL_Bar_Anchor(x=x_max, y=y, h_align="right", v_align=v_align)
 
 
 class CBDL_VBar_Anchor:
+    """Compute category label anchors for vertical bar charts."""
 
     def __init__(self, ax: Axes, bounds: CDL_Bar_Bounds):
+        """
+        Args:
+            ax (Axes): Target axes used to read view limits.
+            bounds (CDL_Bar_Bounds): Aggregate category span used for x
+                positioning.
+        """
         self.ax = ax
         self.bounds = bounds
 
     def get_x(self, h_align: CBDL_VBar_HAlign) -> tuple[float, CBDL_VBar_HAlign]:
-        """Get the anchor point X coordinate and horizontal alignment."""
+        """Return the x coordinate and resolved h_align for the category.
 
+        Args:
+            h_align (CBDL_VBar_HAlign): Horizontal alignment selection.
+                Options: "left", "right", "center".
+
+        Returns:
+            tuple[float, CBDL_VBar_HAlign]: (x, resolved_h_align).
+        """
         options: dict[CBDL_VBar_HAlign, tuple[float, CBDL_VBar_HAlign]] = {
             "left": (self.bounds.min, "left"),
             "right": (self.bounds.max, "right"),
@@ -63,13 +109,27 @@ class CBDL_VBar_Anchor:
         return options[h_align]
 
     def get_y(self) -> float:
-        """Get the anchor point Y max limit coordinate."""
+        """Return the y coordinate at the top edge of the current view.
 
-        ylim_max = self.ax.get_ylim()[1]
-        return ylim_max
+        Returns:
+            float: ax.get_ylim()[1].
+        """
+        return self.ax.get_ylim()[1]
 
     def anchor(self, h_align: CBDL_VBar_HAlign) -> CBDL_Bar_Anchor:
+        """Compute the category label anchor for a vertical bar chart.
 
-        x, ha = self.get_x(h_align)
-        ylim_max = self.get_y()
-        return CBDL_Bar_Anchor(x=x, y=ylim_max, h_align=ha, v_align="top")
+        Args:
+            h_align (CBDL_VBar_HAlign): Horizontal alignment selection.
+                Options: "left", "right", "center".
+
+        Returns:
+            CBDL_Bar_Anchor: Anchor coordinate plus alignment metadata.
+
+        Notes:
+            Vertical category anchors always use v_align="top" to align labels
+            against the top plot edge.
+        """
+        x, h_align = self.get_x(h_align)
+        y_max = self.get_y()
+        return CBDL_Bar_Anchor(x=x, y=y_max, h_align=h_align, v_align="top")

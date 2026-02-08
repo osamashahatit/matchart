@@ -1,20 +1,61 @@
-import pandas as pd
-import numpy as np
-from dataclasses import dataclass
+"""Compute and draw standard (single-series) bar charts from pivoted data.
+
+Many bar charts are single-series (no legend grouping) and can be drawn
+directly from a simple pivot table. Even so, chart code often repeats
+the same steps: extracting tick labels, converting values to floats, and
+choosing between vertical vs. horizontal orientation. This module
+centralizes those responsibilities behind a small data model and drawer
+classes, keeping higher-level chart builders focused on styling and
+layout rather than Matplotlib mechanics.
+"""
+
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 
 
 @dataclass(frozen=True)
 class StandardBarData:
-    """Encapsulates data model for the standard bar chart."""
+    """Store labels and values required to render a standard bar chart.
+
+    Attributes:
+        tick_labels (list[str]): Category labels derived from pivot.index.
+        values (np.ndarray): Values for the single series, aligned to
+            tick_labels order.
+    """
 
     tick_labels: list[str]
     values: np.ndarray
 
     @classmethod
     def from_pivot(cls, pivot: pd.DataFrame) -> "StandardBarData":
-        """Creates StandardBarData from a pivot DataFrame."""
+        """Create standard-bar data from a single-series pivot DataFrame.
+
+        Args:
+            pivot (pd.DataFrame): Pivoted data with exactly ONE column.
+                Index represents categories, single column contains values.
+
+        Returns:
+            StandardBarData: Data model with tick labels and values.
+
+        Raises:
+            ValueError: If pivot doesn't have exactly one column.
+        """
+        if pivot.shape[1] != 1:
+            raise ValueError(
+                f"Standard bar charts (no legend) require exactly one column, "
+                f"but pivot has {pivot.shape[1]} columns. "
+                f"For multi-series data, select a different bar chart type "
+                f"or pass a single-column pivot."
+            )
+
+        if len(pivot) == 0:
+            raise ValueError(
+                "Cannot create bar chart from empty pivot (no categories)."
+            )
 
         tick_labels = pivot.index.astype(str).tolist()
         values = pivot.iloc[:, 0].astype(float, errors="raise").to_numpy(float)
@@ -23,7 +64,14 @@ class StandardBarData:
 
 @dataclass(frozen=True)
 class StandardBarProperties:
-    """Encapsulates properties for standard bar drawing."""
+    """Bundle Axes and properties required to draw standard bars.
+
+    Attributes:
+        ax (Axes): Target axes to draw on (no figure creation).
+        data (StandardBarData): Prepared standard-bar data model.
+        width (float): Bar thickness (width for vertical, height for horizontal).
+        label (str | None): Optional label used for legends.
+    """
 
     ax: Axes
     data: StandardBarData
@@ -31,53 +79,70 @@ class StandardBarProperties:
     label: str | None
 
 
-class StandardBarDrawerABC(ABC):
-    """Abstract base class for standard bar types."""
+class StandardBarDrawerBase(ABC):
+    """Define the interface for standard bar drawers."""
 
     def __init__(self, properties: StandardBarProperties) -> None:
+        """
+        Args:
+            properties (StandardBarProperties): Drawing context including
+                target axes and standard-bar properties.
+        """
         self.properties = properties
-        self.ax = properties.ax
-        self.data = properties.data
 
     @abstractmethod
     def draw(self) -> None:
-        """Draw standard bars on a given axes."""
+        """Draw standard bars on the provided axes."""
         ...
 
 
-class StandardVerticalBarDrawer(StandardBarDrawerABC):
-    """Draws vertical standard bars."""
+class StandardVerticalBarDrawer(StandardBarDrawerBase):
+    """Draw vertical standard bars using Axes.bar()."""
 
     def draw(self) -> None:
-        self.ax.bar(
-            x=self.data.tick_labels,
-            height=self.data.values,
+        """Draw vertical standard bars."""
+        self.properties.ax.bar(  # type:ignore
+            x=self.properties.data.tick_labels,
+            height=self.properties.data.values,
             width=self.properties.width,
             label=self.properties.label,
         )
 
 
-class StandardHorizontalBarDrawer(StandardBarDrawerABC):
-    """Draws horizontal standard bars."""
+class StandardHorizontalBarDrawer(StandardBarDrawerBase):
+    """Draw horizontal standard bars using Axes.barh()."""
 
     def draw(self) -> None:
-        self.ax.barh(
-            y=self.data.tick_labels,
-            width=self.data.values,
+        """Draw horizontal standard bars."""
+        self.properties.ax.barh(  # type:ignore
+            y=self.properties.data.tick_labels,
+            width=self.properties.data.values,
             height=self.properties.width,
             label=self.properties.label,
         )
 
 
 class StandardBarDrawerSelector:
-    """Selects the appropriate standard bar drawer orientation."""
+    """Select a standard bar drawer based on orientation."""
 
     def __init__(self, properties: StandardBarProperties) -> None:
+        """
+        Args:
+            properties (StandardBarProperties): Drawing context to pass to
+                the selected drawer.
+        """
         self.properties = properties
 
-    def get_drawer(self, horizontal: bool) -> StandardBarDrawerABC:
-        """Get the appropriate stacked bar drawer."""
+    def select(self, horizontal: bool) -> StandardBarDrawerBase:
+        """Return the appropriate standard bar drawer.
 
+        Args:
+            horizontal (bool): If True, select a horizontal drawer; else
+                select a vertical drawer.
+
+        Returns:
+            StandardBarDrawerBase: Drawer instance for the chosen orientation.
+        """
         if horizontal:
             return StandardHorizontalBarDrawer(properties=self.properties)
         return StandardVerticalBarDrawer(properties=self.properties)

@@ -1,50 +1,54 @@
+"""Draw bar chart category framed data labels."""
+
 from dataclasses import dataclass
+
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import PathPatch
 
-from matchart.style.utils.num_formatter import (
-    ScaleType,
-    NumberFormat,
-    NumberProperties,
-    NumberFormatter,
-)
-from matchart.style.utils.input_converter import PointDataConverter
+from matchart.style.bar.core._utils import BarStyleHelper
 from matchart.style.utils.data_label.frame_autosizer import FrameAutoSizer
 from matchart.style.utils.data_label.frame_builder import (
-    FDL_FrameDimension,
     FDL_FrameAnchor,
-    FDL_FrameCornerRadii,
     FDL_FrameBuilder,
+    FDL_FrameCornerRadii,
+    FDL_FrameDimension,
 )
 from matchart.style.utils.data_label.frame_labeler import (
-    FDL_Label_HAlign,
-    FDL_Label_VAlign,
-    FDL_FrameDimension,
-    FDL_FrameAnchor,
-    FDL_Label_Properties,
     FDL_Label_AlignProperties,
+    FDL_Label_HAlign,
     FDL_Label_PadProperties,
+    FDL_Label_Properties,
+    FDL_Label_VAlign,
     FramedDataLabeler,
 )
 from matchart.style.utils.data_label.frame_styler import (
     FDL_Frame_Properties,
     FDLFrameStyler,
 )
-from ..._utils import BarStyleHelper
+from matchart.style.utils.input_converter import PointDataConverter
+from matchart.style.utils.num_formatter import (
+    NumberFormat,
+    NumberFormatter,
+    NumberProperties,
+    ScaleType,
+)
+
 from ._frame_anchor import (
-    CFDL_HBar_VAlign,
-    CFDL_VBar_HAlign,
-    CFDL_Bar_Dimension,
+    CFDL_Bar_FrameDimension,
     CFDL_HBar_Anchor,
+    CFDL_HBar_VAlign,
     CFDL_VBar_Anchor,
+    CFDL_VBar_HAlign,
 )
 from ._utils import CDL_Bar_Bounds, CDL_Bar_Totals
 
 
 @dataclass(frozen=True)
 class CFDL_Bar_LabelProperties:
+    """Configure category label font appearance for framed labels."""
+
     font: FontProperties | None
     size: int
     color: str
@@ -52,12 +56,16 @@ class CFDL_Bar_LabelProperties:
 
 @dataclass(frozen=True)
 class CFDL_Bar_Label_AlignProperties:
+    """Configure text alignment inside the frame."""
+
     h_align: FDL_Label_HAlign
     v_align: FDL_Label_VAlign
 
 
 @dataclass(frozen=True)
 class CFDL_Bar_Label_PadProperties:
+    """Configure per-side padding between the frame and the label text."""
+
     left: float | None
     right: float | None
     top: float | None
@@ -66,6 +74,8 @@ class CFDL_Bar_Label_PadProperties:
 
 @dataclass(frozen=True)
 class CFDL_Bar_FrameProperties:
+    """Configure the framed category label background patch appearance."""
+
     face_color: str | None
     face_alpha: float | None
     border_color: str | None
@@ -79,6 +89,8 @@ class CFDL_Bar_FrameProperties:
 
 @dataclass(frozen=True)
 class CFDL_Bar_Frame_AlignProperties:
+    """Configure how the category frame is anchored and offset."""
+
     h_align: CFDL_VBar_HAlign
     v_align: CFDL_HBar_VAlign
     x_offset: float
@@ -86,13 +98,14 @@ class CFDL_Bar_Frame_AlignProperties:
 
 
 class CFDL_Bar:
+    """Iterate tick labels and draw one framed label per category."""
 
     def __init__(
         self,
         ax: Axes,
         fig: Figure,
         horizontal: bool,
-        help: BarStyleHelper,
+        helper: BarStyleHelper,
         formatter: NumberFormatter,
         label: CFDL_Bar_LabelProperties,
         label_align: CFDL_Bar_Label_AlignProperties,
@@ -101,10 +114,29 @@ class CFDL_Bar:
         frame_align: CFDL_Bar_Frame_AlignProperties,
         custom_label: dict[str, float] | None,
     ):
+        """
+        Args:
+            ax (Axes): Target axes that already contains bar artists.
+            fig (Figure): Figure used for text measurements and conversions.
+            horizontal (bool): Whether the bar chart is horizontal.
+            helper (BarStyleHelper): Helper class.
+            formatter (NumberFormatter): Number formatter.
+            label (CFDL_Bar_LabelProperties): Label appearance configuration.
+            label_align (CFDL_Bar_Label_AlignProperties): Label alignment
+                inside the frame.
+            label_pad (CFDL_Bar_Label_PadProperties): Padding between frame and
+                text (points).
+            frame (CFDL_Bar_FrameProperties): Frame appearance configuration.
+            frame_align (CFDL_Bar_Frame_AlignProperties): Frame anchor selection
+                and offsets (points).
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from bar patches.
+        """
         self.ax = ax
         self.fig = fig
         self.horizontal = horizontal
-        self.help = help
+        self.helper = helper
         self.formatter = formatter
         self.label = label
         self.label_align = label_align
@@ -114,34 +146,43 @@ class CFDL_Bar:
         self.custom_label = custom_label
 
     def draw(self, default_pad: float) -> None:
+        """Draw framed category labels for each tick label on the Axes.
 
-        for category_index in self.help.get_tick_labels():
+        Args:
+            default_pad (float): Default padding in points used when a specific
+                pad side is not provided.
 
-            category_bounds = CDL_Bar_Bounds.bounds(
+        Notes:
+            This method mutates the Axes by adding frame patches and Text
+            artists. It does not return self (not chainable).
+        """
+        for tick_label in self.helper.get_tick_labels():
+            bounds = CDL_Bar_Bounds.bounds(
                 ax=self.ax,
-                help=self.help,
+                helper=self.helper,
                 horizontal=self.horizontal,
-                category_index=category_index,
+                tick_label=tick_label,
             )
 
             if self.custom_label is None:
-                category_label = CDL_Bar_Totals.totals(
+                label = CDL_Bar_Totals.compute_total(
                     ax=self.ax,
-                    help=self.help,
+                    helper=self.helper,
                     horizontal=self.horizontal,
-                    category_index=category_index,
-                ).value
+                    tick_label=tick_label,
+                ).total
             else:
-                category_label = self.custom_label[category_index]
+                label = self.custom_label[tick_label]
 
+            # Measure the frame in points based on the formatted label value.
             frame = FrameAutoSizer(
                 fig=self.fig,
                 pad=default_pad,
                 font=self.label.font,
                 size=self.label.size,
                 formatter=self.formatter,
-            ).compute_dimension(
-                label=category_label,
+            ).measure_frame(
+                label=label,
                 custom_width=self.frame.custom_width,
                 custom_height=self.frame.custom_height,
             )
@@ -149,62 +190,66 @@ class CFDL_Bar:
             width = frame.width
             height = frame.height
 
-            data_coords = PointDataConverter(ax=self.ax, fig=self.fig)
+            # Convert all point-based properties into data units for correct
+            # positioning on the current Axes scale.
+            converter = PointDataConverter(ax=self.ax, fig=self.fig)
             frame_x, frame_y = (
-                data_coords.convert("x", width),
-                data_coords.convert("y", height),
+                converter.convert("x", width),
+                converter.convert("y", height),
             )
             offset_x, offset_y = (
-                data_coords.convert("x", self.frame_align.x_offset),
-                data_coords.convert("y", self.frame_align.y_offset),
+                converter.convert("x", self.frame_align.x_offset),
+                converter.convert("y", self.frame_align.y_offset),
             )
             border_x, border_y = (
-                data_coords.convert("x", self.frame.border_width),
-                data_coords.convert("y", self.frame.border_width),
+                converter.convert("x", self.frame.border_width),
+                converter.convert("y", self.frame.border_width),
             )
             radius_x, radius_y = (
-                data_coords.convert("x", self.frame.border_radius),
-                data_coords.convert("y", self.frame.border_radius),
+                converter.convert("x", self.frame.border_radius),
+                converter.convert("y", self.frame.border_radius),
             )
 
+            # Per-side padding, defaulting to default_pad when None.
             pad_left_data = (
-                data_coords.convert(axis="x", points=self.label_pad.left)
+                converter.convert(axis="x", points=self.label_pad.left)
                 if self.label_pad.left is not None
-                else data_coords.convert(axis="x", points=default_pad)
+                else converter.convert(axis="x", points=default_pad)
             )
             pad_right_data = (
-                data_coords.convert(axis="x", points=self.label_pad.right)
+                converter.convert(axis="x", points=self.label_pad.right)
                 if self.label_pad.right is not None
-                else data_coords.convert(axis="x", points=default_pad)
+                else converter.convert(axis="x", points=default_pad)
             )
             pad_top_data = (
-                data_coords.convert(axis="y", points=self.label_pad.top)
+                converter.convert(axis="y", points=self.label_pad.top)
                 if self.label_pad.top is not None
-                else data_coords.convert(axis="y", points=default_pad)
+                else converter.convert(axis="y", points=default_pad)
             )
             pad_bottom_data = (
-                data_coords.convert(axis="y", points=self.label_pad.bottom)
+                converter.convert(axis="y", points=self.label_pad.bottom)
                 if self.label_pad.bottom is not None
-                else data_coords.convert(axis="y", points=default_pad)
+                else converter.convert(axis="y", points=default_pad)
             )
 
-            dimension = CFDL_Bar_Dimension(
+            dimension = CFDL_Bar_FrameDimension(
                 width=frame_x,
                 height=frame_y,
                 border_width_x=border_x,
                 border_width_y=border_y,
             )
 
+            # Compute a plot-edge anchor that accounts for the frame size.
             if self.horizontal:
                 category_anchor = CFDL_HBar_Anchor(
                     ax=self.ax,
-                    bounds=category_bounds,
+                    bounds=bounds,
                     dimension=dimension,
                 ).anchor(v_align=self.frame_align.v_align)
             else:
                 category_anchor = CFDL_VBar_Anchor(
                     ax=self.ax,
-                    bounds=category_bounds,
+                    bounds=bounds,
                     dimension=dimension,
                 ).anchor(h_align=self.frame_align.h_align)
 
@@ -238,10 +283,7 @@ class CFDL_Bar:
                 anchor=FDL_FrameAnchor(
                     x_min=category_anchor.x + offset_x,
                     y_min=category_anchor.y + offset_y,
-                    dimension=FDL_FrameDimension(
-                        width=frame_x,
-                        height=frame_y,
-                    ),
+                    dimension=FDL_FrameDimension(width=frame_x, height=frame_y),
                 ),
                 formatter=self.formatter,
                 label=FDL_Label_Properties(
@@ -260,12 +302,19 @@ class CFDL_Bar:
                     bottom=pad_bottom_data,
                 ),
                 gid="BarCategoryFramedDataLabel_Label",
-            ).draw(label=category_label)
+            ).draw(label=label)
 
 
 class CFDL_Bar_Drawer:
+    """Configure and draw framed category-level labels for bar charts."""
 
     def __init__(self, ax: Axes, fig: Figure, horizontal: bool):
+        """
+        Args:
+            ax (Axes): Target axes that already contains bar artists.
+            fig (Figure): Figure used for measurement and conversion.
+            horizontal (bool): Whether the bar chart is horizontal.
+        """
         self.ax = ax
         self.fig = fig
         self.horizontal = horizontal
@@ -279,13 +328,13 @@ class CFDL_Bar_Drawer:
         self._label_h_align: FDL_Label_HAlign = "center"
         self._label_v_align: FDL_Label_VAlign = "center"
 
-        # Label pad properties
+        # Label pad properties (points)
         self._pad_left: float | None = None
         self._pad_right: float | None = None
         self._pad_top: float | None = None
         self._pad_bottom: float | None = None
 
-        # Frame properties
+        # Frame properties (units are points where applicable)
         self._frame_face_color: str | None = "#FFFFFF"
         self._frame_face_alpha: float = 1.0
         self._frame_border_color: str = "#000000"
@@ -296,14 +345,14 @@ class CFDL_Bar_Drawer:
         self._frame_custom_width: float | None = None
         self._frame_custom_height: float | None = None
 
-        # Frame align properties
+        # Frame align properties (offsets are points)
         self._frame_h_align: CFDL_VBar_HAlign = "center"
         self._frame_v_align: CFDL_HBar_VAlign = "center"
         self._frame_x_offset: float = 0.0
         self._frame_y_offset: float = 0.0
 
         # Format properties
-        self._type: NumberFormat = "number"
+        self._format_type: NumberFormat = "number"
         self._decimals: int = 0
         self._separator: bool = False
         self._currency: str | None = None
@@ -315,24 +364,19 @@ class CFDL_Bar_Drawer:
         size: int = 10,
         color: str = "#000000",
     ) -> "CFDL_Bar_Drawer":
+        """Set label font properties.
+
+        Args:
+            font (FontProperties | None): Font style. If None, Matplotlib
+                defaults are used.
+            size (int | None): Font size. If None, Matplotlib defaults
+                are used.
+            color (str | None): Font color. If None, Matplotlib defaults
+                are used.
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label properties.
-
-        Parameters
-        ----------
-        font : FontProperties | None. Default is None.
-            The font for the data label.
-        size : int | None. Default is None.
-            The font size for the data label.
-        color : str | None. Default is None.
-            The font color for the data label.
-
-        Returns
-        -------
-        CBDL_Bar_Drawer
-            The current instance for method chaining.
-        """
-
         self._label_font = font
         self._label_size = size
         self._label_color = color
@@ -343,22 +387,17 @@ class CFDL_Bar_Drawer:
         h_align: FDL_Label_HAlign = "center",
         v_align: FDL_Label_VAlign = "center",
     ) -> "CFDL_Bar_Drawer":
+        """Set text alignment inside the frame.
+
+        Args:
+            h_align (FDL_Label_HAlign): Horizontal alignment inside the frame.
+                Options: "left", "right", "center".
+            v_align (FDL_Label_VAlign): Vertical alignment inside the frame.
+                Options: "top", "bottom", "center".
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label alignment properties.
-
-        Parameters
-        ----------
-        h_align : {"left", "right", "center"}. Default is "center".
-            The horizontal alignment for the data label.
-        v_align : {"top", "bottom", "center"}. Default is "center".
-            The vertical alignment for the data label.
-
-        Returns
-        -------
-        FDL_BarDrawer
-            The current instance for method chaining.
-        """
-
         self._label_h_align = h_align
         self._label_v_align = v_align
         return self
@@ -370,26 +409,20 @@ class CFDL_Bar_Drawer:
         top: float | None = None,
         bottom: float | None = None,
     ) -> "CFDL_Bar_Drawer":
+        """Set padding between the frame and the label text.
+
+        All padding values are interpreted as points and converted into data
+        units at draw time.
+
+        Args:
+            left (float | None): Left padding.
+            right (float | None): Right padding.
+            top (float | None): Top padding.
+            bottom (float | None): Bottom padding.
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label padding properties.
-
-        Parameters
-        ----------
-        left : float | None. Default is None.
-            The left padding for the data label in points. If None, default padding will be used.
-        right : float | None. Default is None.
-            The right padding for the data label in points. If None, default padding will be used.
-        top : float | None. Default is None.
-            The top padding for the data label in points. If None, default padding will be used.
-        bottom : float | None. Default is None.
-            The bottom padding for the data label in points. If None, default padding will be used
-
-        Returns
-        -------
-        FDL_BarDrawer
-            The current instance for method chaining.
-        """
-
         self._pad_left = left
         self._pad_right = right
         self._pad_top = top
@@ -408,36 +441,22 @@ class CFDL_Bar_Drawer:
         custom_width: float | None = None,
         custom_height: float | None = None,
     ) -> "CFDL_Bar_Drawer":
+        """Set framed label background properties.
+
+        Args:
+            face_color (str): Fill color for the frame.
+            face_alpha (float): Fill alpha in [0.0, 1.0].
+            border_color (str): Border color for the frame.
+            border_alpha (float): Border alpha in [0.0, 1.0].
+            border_style (str): Border linestyle string (e.g. "-", "--", ":").
+            border_width (float): Border width.
+            border_radius (float): Corner radius.
+            custom_width (float | None): Optional override for auto width.
+            custom_height (float | None): Optional override for auto height.
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label frame properties.
-
-        Parameters
-        ----------
-        face_color : str. Default is "#FFFFFF".
-            The face color for the data label frame.
-        face_alpha : float. Default is 1.0.
-            The face alpha for the data label frame.
-        border_color : str. Default is "#000000".
-            The border color for the data label frame.
-        border_alpha : float. Default is 1.0.
-            The border alpha for the data label frame.
-        border_style : str. Default is "solid".
-            The border style for the data label frame.
-        border_width : float. Default is 1.0.
-            The border width for the data label frame.
-        border_radius : float. Default is 0.0.
-            The border radius for the data label frame.
-        custom_width : float | None. Default is None.
-            The custom width for the data label frame in data units. If None, auto size will be used.
-        custom_height : float | None. Default is None.
-            The custom height for the data label frame in data units. If None, auto size will be used.
-
-        Returns
-        -------
-        FDL_BarDrawer
-            The current instance for method chaining.
-        """
-
         self._frame_face_color = face_color
         self._frame_face_alpha = face_alpha
         self._frame_border_color = border_color
@@ -456,26 +475,19 @@ class CFDL_Bar_Drawer:
         x_offset: float = 0.0,
         y_offset: float = 0.0,
     ) -> "CFDL_Bar_Drawer":
+        """Set how the frame is anchored relative to each category.
+
+        Args:
+            h_align (CFDL_VBar_HAlign): Horizontal anchor selection for vertical
+                bar charts. Options: "left", "right", "center".
+            v_align (CFDL_HBar_VAlign): Vertical anchor selection for horizontal
+                bar charts. Options: "top", "bottom", "center".
+            x_offset (float): Offset applied from anchor x coordinate.
+            y_offset (float): Offset applied from anchor y coordinate.
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label frame alignment properties.
-
-        Parameters
-        ----------
-        h_align : {"left", "right", "center"}. Default is "center".
-            The horizontal alignment for the data label. Valid only for vertical bars.
-        v_align : {"top", "bottom", "center"}. Default is "center".
-            The vertical alignment for the data label. Valid only for horizontal bars.
-        x_offset : float. Default is 0.0.
-            The horizontal offset for the data label frame.
-        y_offset : float. Default is 0.0.
-            The vertical offset for the data label frame.
-
-        Returns
-        -------
-        FDL_BarDrawer
-            The current instance for method chaining.
-        """
-
         self._frame_h_align = h_align
         self._frame_v_align = v_align
         self._frame_x_offset = x_offset
@@ -484,35 +496,27 @@ class CFDL_Bar_Drawer:
 
     def format(
         self,
-        type: NumberFormat = "number",
+        format_type: NumberFormat = "number",
         decimals: int = 0,
         separator: bool = False,
         currency: str | None = None,
         scale: ScaleType = "full",
     ) -> "CFDL_Bar_Drawer":
+        """Configure numeric formatting for category labels.
+
+        Args:
+            format_type (NumberFormat): Numeric formatting mode.
+                Options: "number", "percent".
+            decimals (int): Number of decimal places to display.
+            separator (bool): Whether to use thousands separators.
+            currency (str | None): Optional currency symbol/code.
+            scale (ScaleType): Scaling mode for large numbers.
+                Options: "k", "m", "b", "t", "full", "auto".
+
+        Returns:
+            CFDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category framed data label number format properties.
-
-        Parameters
-        ----------
-        type : {"number", "percent"}. Default is "number".
-            The number format type for the data label.
-        decimals : int. Default is 0.
-            The number of decimal places for the data label.
-        separator : bool. Default is False.
-            Whether to use a thousands separator for the data label.
-        currency : str | None. Default is None.
-            The currency symbol for the data label. Only used if type is "currency".
-        scale : {"k", "m", "b", "t", "full", "auto"}. Default is "full".
-            The scale for the data label.
-
-        Returns
-        -------
-        FDL_BarDrawer
-            The current instance for method chaining.
-        """
-
-        self._type = type
+        self._format_type = format_type
         self._decimals = decimals
         self._separator = separator
         self._currency = currency
@@ -524,22 +528,24 @@ class CFDL_Bar_Drawer:
         custom_label: dict[str, float] | None = None,
         clear: bool = True,
     ) -> None:
-        """
-        Draw the category framed data label on the bars. Before calling draw(), ensure that
-        all desired styling methods have been called to set up the data label appearance.
+        """Draw framed category labels onto the Axes.
 
-        Parameters
-        ----------
-        custom_label : dict[str, float] | None. Default is None.
-            A dictionary mapping category indices to custom label values. If None,
-            the total value for each category will be used as the label.
-        clear : bool. Default is True.
-            Clear existing category framed data labels before drawing new ones.
-        """
+        Args:
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from bar patches.
+            clear (bool): If True, remove existing labels previously drawn by
+                this drawer (identified by gid "BarCategoryFramedDataLabel_Label"
+                and "BarCategoryFramedDataLabel_Frame").
 
-        help = BarStyleHelper(ax=self.ax, horizontal=self.horizontal)
+        Notes:
+            This method mutates the Axes by removing and adding artists. It
+            does not return self (not chainable).
+        """
+        helper = BarStyleHelper(ax=self.ax, horizontal=self.horizontal)
 
         if clear:
+            # Remove prior framed category labels created by this module.
             for label in self.ax.texts[:]:
                 if label.get_gid() == "BarCategoryFramedDataLabel_Label":
                     label.remove()
@@ -553,7 +559,7 @@ class CFDL_Bar_Drawer:
 
         formatter = NumberFormatter(
             properties=NumberProperties(
-                type=self._type,
+                format_type=self._format_type,
                 decimals=self._decimals,
                 separator=self._separator,
                 currency=self._currency,
@@ -565,7 +571,7 @@ class CFDL_Bar_Drawer:
             ax=self.ax,
             fig=self.fig,
             horizontal=self.horizontal,
-            help=help,
+            helper=helper,
             formatter=formatter,
             label=CFDL_Bar_LabelProperties(
                 font=self._label_font,

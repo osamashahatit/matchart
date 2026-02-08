@@ -1,4 +1,7 @@
+"""Show, hide, and style axis spines."""
+
 from typing import Literal
+
 from matplotlib.axes import Axes
 
 type SelectSpine = (
@@ -8,7 +11,13 @@ type SelectSpine = (
 
 
 class AxisSpine:
+    """Apply visibility and styling to one or more axis spines."""
+
     def __init__(self, ax: Axes) -> None:
+        """
+        Args:
+            ax (Axes): Target axes whose spines will be modified.
+        """
         self.ax = ax
 
     def draw(
@@ -19,26 +28,23 @@ class AxisSpine:
         width: float | None = None,
         style: str | None = None,
         position: float | None = None,
-    ):
-        """
-        Draw and style the specified spines of the axis.
+    ) -> None:
+        """Show, hide, and style selected axis spines.
 
-        Parameters
-        ----------
-        select : {"all", "top", "bottom", "left", "right"} | List[{"top", "bottom", "left", "right"}]
-            The spine(s) to modify. "all" modifies all spines.
-        show : bool. Default is True.
-            Show or hide the selected spine(s).
-        color : str | None. Default is None.
-            The color of the selected spine(s).
-        width : float | None. Default is None.
-            The width of the selected spine(s).
-        style : str | None. Default is None.
-            The style of the selected spine(s).
-        position : float | None. Default is None.
-            The position of the selected spine(s) as a percentage of the axis (0 to 100). Default is None.
-        """
+        Args:
+            select (SelectSpine): Spine selection.
+                Options: "all", "top", "bottom", "left", "right",
+                or a list of ["top", "bottom", "left", "right"].
+            show (bool): Whether to show or hide the selected spines.
+            color (str | None): Optional spine edge color.
+            width (float | None): Optional spine line width.
+            style (str | None): Optional spine line style.
+            position (float | None): Optional spine position as a percentage
+                (0–100) of the axes coordinate system.
 
+        Returns:
+            None: Spine objects are modified in place.
+        """
         match select:
             case "all":
                 spines = ["top", "bottom", "left", "right"]
@@ -46,19 +52,25 @@ class AxisSpine:
                 spines = [select]
             case list():
                 spines = list(select)
-            case _:
-                raise ValueError(f"Invalid select value: {select}")
 
-        for spine in spines:
-            if spine in self.ax.spines:
-                spine = self.ax.spines[spine]
-                spine.set_visible(show)
-                if color is not None:
-                    spine.set_edgecolor(color)
-                if width is not None:
-                    spine.set_linewidth(width)
-                if style is not None:
-                    spine.set_linestyle(style)
-                if position is not None:
-                    position_value = position / 100.0
-                    spine.set_position(("axes", position_value))
+        for spine_name in spines:
+            if spine_name not in self.ax.spines:
+                continue
+
+            spine = self.ax.spines[spine_name]
+
+            spine.set_visible(show)
+
+            if color is not None:
+                spine.set_edgecolor(color)
+
+            if width is not None:
+                spine.set_linewidth(width)
+
+            if style is not None:
+                spine.set_linestyle(style)
+
+            if position is not None:
+                # Convert percentage to axes coordinates.
+                position_value = position / 100.0
+                spine.set_position(("axes", position_value))

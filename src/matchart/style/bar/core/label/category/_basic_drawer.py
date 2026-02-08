@@ -1,7 +1,11 @@
+"""Draw bar chart category basic data labels."""
+
 from dataclasses import dataclass
+
 from matplotlib.axes import Axes
 from matplotlib.font_manager import FontProperties
 
+from matchart.style.bar.core._utils import BarStyleHelper
 from matchart.style.utils.data_label.basic_labeler import (
     BasicDataLabeler,
     BDL_AlignProperties,
@@ -10,22 +14,24 @@ from matchart.style.utils.data_label.basic_labeler import (
 )
 from matchart.style.utils.num_formatter import (
     NumberFormat,
-    ScaleType,
-    NumberProperties,
     NumberFormatter,
+    NumberProperties,
+    ScaleType,
 )
-from ..._utils import BarStyleHelper
+
 from ._basic_anchor import (
-    CBDL_VBar_HAlign,
-    CBDL_HBar_VAlign,
     CBDL_HBar_Anchor,
+    CBDL_HBar_VAlign,
     CBDL_VBar_Anchor,
+    CBDL_VBar_HAlign,
 )
 from ._utils import CDL_Bar_Bounds, CDL_Bar_Totals
 
 
 @dataclass(frozen=True)
 class CBDL_Bar_LabelProperties:
+    """Configure category label font appearance."""
+
     font: FontProperties | None
     size: int | None
     color: str | None
@@ -33,6 +39,8 @@ class CBDL_Bar_LabelProperties:
 
 @dataclass(frozen=True)
 class CBDL_Bar_AlignProperties:
+    """Configure category label anchoring and offsets."""
+
     h_align: CBDL_VBar_HAlign
     v_align: CBDL_HBar_VAlign
     x_offset: float
@@ -40,60 +48,81 @@ class CBDL_Bar_AlignProperties:
 
 
 class CBDL_Bar:
+    """Iterate tick labels and draw one label per category."""
 
     def __init__(
         self,
         ax: Axes,
         horizontal: bool,
-        help: BarStyleHelper,
+        helper: BarStyleHelper,
         formatter: NumberFormatter,
         label: CBDL_Bar_LabelProperties,
         align: CBDL_Bar_AlignProperties,
         custom_label: dict[str, float] | None,
     ):
+        """
+        Args:
+            ax (Axes): Target axes that already contains bar artists.
+            horizontal (bool): Whether the bar chart is horizontal.
+            helper (BarStyleHelper): Helper class.
+            formatter (NumberFormatter): Number formatter.
+            label (CBDL_Bar_LabelProperties): Label appearance configuration.
+            align (CBDL_Bar_AlignProperties): Alignment and offset configuration.
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from bar patches.
+        """
         self.ax = ax
         self.horizontal = horizontal
-        self.help = help
+        self.helper = helper
         self.formatter = formatter
         self.label = label
         self.align = align
         self.custom_label = custom_label
 
     def draw(self) -> None:
+        """Draw category labels for each tick label on the Axes.
 
-        for category_index in self.help.get_tick_labels():
-
-            category_bounds = CDL_Bar_Bounds.bounds(
+        Notes:
+            This method mutates the Axes by adding Text artists. It does not
+            return self (not chainable).
+        """
+        for tick_label in self.helper.get_tick_labels():
+            # Aggregate span for this tick label across all bar containers.
+            bounds = CDL_Bar_Bounds.bounds(
                 ax=self.ax,
-                help=self.help,
+                helper=self.helper,
                 horizontal=self.horizontal,
-                category_index=category_index,
+                tick_label=tick_label,
             )
 
+            # Default label is the sum across containers; custom_label can
+            # override this per tick.
             if self.custom_label is None:
-                category_label = CDL_Bar_Totals.totals(
+                label = CDL_Bar_Totals.compute_total(
                     ax=self.ax,
-                    help=self.help,
+                    helper=self.helper,
                     horizontal=self.horizontal,
-                    category_index=category_index,
-                ).value
+                    tick_label=tick_label,
+                ).total
             else:
-                category_label = self.custom_label[category_index]
+                label = self.custom_label[tick_label]
 
+            # Category anchors are placed at the plot edge using Axes limits.
             if self.horizontal:
-                category_anchor = CBDL_HBar_Anchor(
+                anchor = CBDL_HBar_Anchor(
                     ax=self.ax,
-                    bounds=category_bounds,
+                    bounds=bounds,
                 ).anchor(v_align=self.align.v_align)
             else:
-                category_anchor = CBDL_VBar_Anchor(
+                anchor = CBDL_VBar_Anchor(
                     ax=self.ax,
-                    bounds=category_bounds,
+                    bounds=bounds,
                 ).anchor(h_align=self.align.h_align)
 
             BasicDataLabeler(
                 ax=self.ax,
-                anchor=BDL_LabelAnchor(x=category_anchor.x, y=category_anchor.y),
+                anchor=BDL_LabelAnchor(x=anchor.x, y=anchor.y),
                 formatter=self.formatter,
                 label=BDL_LabelProperties(
                     font=self.label.font,
@@ -101,18 +130,24 @@ class CBDL_Bar:
                     color=self.label.color,
                 ),
                 align=BDL_AlignProperties(
-                    h_align=category_anchor.h_align,
-                    v_align=category_anchor.v_align,
+                    h_align=anchor.h_align,
+                    v_align=anchor.v_align,
                     x_offset=self.align.x_offset,
                     y_offset=self.align.y_offset,
                 ),
                 gid="BarCategoryBasicDataLabel",
-            ).draw(label=category_label)
+            ).draw(label=label)
 
 
 class CBDL_Bar_Drawer:
+    """Configure and draw category-level labels for bar charts."""
 
     def __init__(self, ax: Axes, horizontal: bool) -> None:
+        """
+        Args:
+            ax (Axes): Target axes that already contains bar artists.
+            horizontal (bool): Whether the bar chart is horizontal.
+        """
         self.ax = ax
         self.horizontal = horizontal
 
@@ -128,7 +163,7 @@ class CBDL_Bar_Drawer:
         self._y_offset: float = 0.0
 
         # Format properties
-        self._type: NumberFormat = "number"
+        self._format_type: NumberFormat = "number"
         self._decimals: int = 0
         self._separator: bool = False
         self._currency: str | None = None
@@ -140,24 +175,19 @@ class CBDL_Bar_Drawer:
         size: int | None = None,
         color: str | None = None,
     ) -> "CBDL_Bar_Drawer":
+        """Set label font properties.
+
+        Args:
+            font (FontProperties | None): Font style. If None, Matplotlib
+                defaults are used.
+            size (int | None): Font size. If None, Matplotlib defaults
+                are used.
+            color (str | None): Font color. If None, Matplotlib defaults
+                are used.
+
+        Returns:
+            CBDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category basic data label properties.
-
-        Parameters
-        ----------
-        font : FontProperties | None. Default is None.
-            The font for the data label.
-        size : int | None. Default is None.
-            The font size for the data label.
-        color : str | None. Default is None.
-            The font color for the data label.
-
-        Returns
-        -------
-        CBDL_Bar_Drawer
-            The current instance for method chaining.
-        """
-
         self._font = font
         self._size = size
         self._color = color
@@ -170,26 +200,19 @@ class CBDL_Bar_Drawer:
         x_offset: float = 0.0,
         y_offset: float = 0.0,
     ) -> "CBDL_Bar_Drawer":
+        """Set category anchor selection and offsets.
+
+        Args:
+            h_align (CBDL_VBar_HAlign): Horizontal alignment selection for
+                vertical bar charts. Options: "left", "right", "center".
+            v_align (CBDL_HBar_VAlign): Vertical alignment selection for
+                horizontal bar charts. Options: "top", "bottom", "center".
+            x_offset (float): Offset to apply in the x direction.
+            y_offset (float): Offset to apply in the y direction.
+
+        Returns:
+            CBDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category basic data label alignment properties.
-
-        Parameters
-        ----------
-        h_align : {"left", "right", "center"}. Default is "center".
-            The horizontal alignment for the data label. Valid only for vertical bars.
-        v_align : {"top", "bottom", "center"}. Default is "center".
-            The vertical alignment for the data label. Valid only for horizontal bars.
-        x_offset : float. Default is 0.0.
-            The horizontal offset for the data label.
-        y_offset : float. Default is 0.0.
-            The vertical offset for the data label.
-
-        Returns
-        -------
-        CBDL_Bar_Drawer
-            The current instance for method chaining.
-        """
-
         self._h_align = h_align
         self._v_align = v_align
         self._x_offset = x_offset
@@ -198,35 +221,27 @@ class CBDL_Bar_Drawer:
 
     def format(
         self,
-        type: NumberFormat = "number",
+        format_type: NumberFormat = "number",
         decimals: int = 0,
         separator: bool = False,
         currency: str | None = None,
         scale: ScaleType = "full",
     ) -> "CBDL_Bar_Drawer":
+        """Configure numeric formatting for category labels.
+
+        Args:
+            format_type (NumberFormat): Numeric formatting mode.
+                Options: "number", "percent".
+            decimals (int): Number of decimal places to display.
+            separator (bool): Whether to use thousands separators.
+            currency (str | None): Optional currency symbol/code.
+            scale (ScaleType): Scaling mode for large numbers.
+                Options: "k", "m", "b", "t", "full", "auto".
+
+        Returns:
+            CBDL_Bar_Drawer: The current instance for method chaining.
         """
-        Set the category basic data label number format properties.
-
-        Parameters
-        ----------
-        type : {"number", "percent"}. Default is "number".
-            The number format type for the data label.
-        decimals : int. Default is 0.
-            The number of decimal places for the data label.
-        separator : bool. Default is False.
-            Whether to use a thousands separator for the data label.
-        currency : str | None. Default is None.
-            The currency symbol for the data label. Only used if type is "currency".
-        scale : {"k", "m", "b", "t", "full", "auto"}. Default is "full".
-            The scale for the data label.
-
-        Returns
-        -------
-        CBDL_Bar_Drawer
-            The current instance for method chaining.
-        """
-
-        self._type = type
+        self._format_type = format_type
         self._decimals = decimals
         self._separator = separator
         self._currency = currency
@@ -238,20 +253,20 @@ class CBDL_Bar_Drawer:
         custom_label: dict[str, float] | None = None,
         clear: bool = True,
     ) -> None:
-        """
-        Draw the category basic data label on the bars. Before calling draw(), ensure that
-        all desired styling methods have been called to set up the data label appearance.
+        """Draw category labels onto the Axes.
 
-        Parameters
-        ----------
-        custom_label : dict[str, float] | None. Default is None.
-            A dictionary mapping category indices to custom label values. If None,
-            the total value for each category will be used as the label.
-        clear : bool. Default is True.
-            Clear existing category basic data labels before drawing new ones.
-        """
+        Args:
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from bar patches.
+            clear (bool): If True, remove existing labels previously drawn by
+                this drawer (identified by gid "BarCategoryBasicDataLabel").
 
-        help = BarStyleHelper(ax=self.ax, horizontal=self.horizontal)
+        Notes:
+            This method mutates the Axes by removing and adding Text artists.
+            It does not return self (not chainable).
+        """
+        helper = BarStyleHelper(ax=self.ax, horizontal=self.horizontal)
 
         if clear:
             for label in self.ax.texts[:]:
@@ -260,7 +275,7 @@ class CBDL_Bar_Drawer:
 
         formatter = NumberFormatter(
             properties=NumberProperties(
-                type=self._type,
+                format_type=self._format_type,
                 decimals=self._decimals,
                 separator=self._separator,
                 currency=self._currency,
@@ -271,7 +286,7 @@ class CBDL_Bar_Drawer:
         CBDL_Bar(
             ax=self.ax,
             horizontal=self.horizontal,
-            help=help,
+            helper=helper,
             formatter=formatter,
             label=CBDL_Bar_LabelProperties(
                 font=self._font,

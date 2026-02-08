@@ -1,3 +1,5 @@
+"""Draw framed category-level framed data labels for line charts."""
+
 from dataclasses import dataclass
 
 from matplotlib.axes import Axes
@@ -5,6 +7,7 @@ from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import PathPatch
 
+from matchart.style.line.core._utils import LineStyleHelper
 from matchart.style.utils.data_label.frame_autosizer import FrameAutoSizer
 from matchart.style.utils.data_label.frame_builder import (
     FDL_FrameAnchor,
@@ -32,13 +35,14 @@ from matchart.style.utils.num_formatter import (
     ScaleType,
 )
 
-from ..._utils import LineStyleHelper
 from ._frame_anchor import CFDL_Line_Anchor, CFDL_Line_FrameDimension
 from ._utils import CDL_Line_Totals
 
 
 @dataclass(frozen=True)
 class CFDL_Line_LabelProperties:
+    """Configure category label font appearance for framed line labels."""
+
     font: FontProperties | None
     size: int
     color: str
@@ -46,12 +50,16 @@ class CFDL_Line_LabelProperties:
 
 @dataclass(frozen=True)
 class CFDL_Line_Label_AlignProperties:
+    """Configure text alignment inside the frame."""
+
     h_align: FDL_Label_HAlign
     v_align: FDL_Label_VAlign
 
 
 @dataclass(frozen=True)
 class CFDL_Line_Label_PadProperties:
+    """Configure per-side padding between the frame and the label text."""
+
     left: float | None
     right: float | None
     top: float | None
@@ -60,6 +68,8 @@ class CFDL_Line_Label_PadProperties:
 
 @dataclass(frozen=True)
 class CFDL_Line_FrameProperties:
+    """Configure the framed category label background patch appearance."""
+
     face_color: str | None
     face_alpha: float | None
     border_color: str | None
@@ -73,11 +83,15 @@ class CFDL_Line_FrameProperties:
 
 @dataclass(frozen=True)
 class CFDL_Line_Frame_AlignProperties:
+    """Configure frame offsets applied after anchoring."""
+
     x_offset: float
     y_offset: float
 
 
 class CFDL_Line:
+    """Iterate tick labels and draw one framed category label per tick."""
+
     def __init__(
         self,
         ax: Axes,
@@ -91,6 +105,24 @@ class CFDL_Line:
         frame_align: CFDL_Line_Frame_AlignProperties,
         custom_label: dict[str, float] | None,
     ):
+        """
+        Args:
+            ax (Axes): Target axes that already contains line artists.
+            fig (Figure): Figure used for text measurements and conversions.
+            helper (LineStyleHelper): Helper class.
+            formatter (NumberFormatter): Number formatter.
+            label (CFDL_Line_LabelProperties): Label appearance configuration.
+            label_align (CFDL_Line_Label_AlignProperties): Label alignment
+                inside the frame.
+            label_pad (CFDL_Line_Label_PadProperties): Padding between frame and
+                text (points).
+            frame (CFDL_Line_FrameProperties): Frame appearance configuration.
+            frame_align (CFDL_Line_Frame_AlignProperties): Frame offsets
+                (points).
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from line data via CDL_Line_Totals.
+        """
         self.ax = ax
         self.fig = fig
         self.helper = helper
@@ -103,6 +135,16 @@ class CFDL_Line:
         self.custom_label = custom_label
 
     def draw(self, default_pad: float) -> None:
+        """Draw framed category labels for each tick label on the Axes.
+
+        Args:
+            default_pad (float): Default padding in points used when a specific
+                pad side is not provided.
+
+        Notes:
+            This method mutates the Axes by adding frame patches and Text
+            artists. It does not return self (not chainable).
+        """
         tick_labels = self.helper.get_tick_labels()
 
         for tick_label in tick_labels:
@@ -114,13 +156,14 @@ class CFDL_Line:
             else:
                 label = self.custom_label[tick_label]
 
+            # Measure the frame in points based on the formatted label value.
             frame = FrameAutoSizer(
                 fig=self.fig,
                 pad=default_pad,
                 font=self.label.font,
                 size=self.label.size,
                 formatter=self.formatter,
-            ).compute_dimension(
+            ).measure_frame(
                 label=label,
                 custom_width=self.frame.custom_width,
                 custom_height=self.frame.custom_height,
@@ -129,6 +172,8 @@ class CFDL_Line:
             width = frame.width
             height = frame.height
 
+            # Convert all point-based properties into data units for correct
+            # positioning on the current Axes scale.
             converter = PointDataConverter(ax=self.ax, fig=self.fig)
             frame_x, frame_y = (
                 converter.convert("x", width),
@@ -147,6 +192,7 @@ class CFDL_Line:
                 converter.convert("y", self.frame.border_radius),
             )
 
+            # Per-side padding, defaulting to default_pad when None.
             pad_left_data = (
                 converter.convert(axis="x", points=self.label_pad.left)
                 if self.label_pad.left is not None
@@ -175,6 +221,7 @@ class CFDL_Line:
                 border_width_y=border_y,
             )
 
+            # Compute a frame-aware anchor centered on the tick label.
             anchor = CFDL_Line_Anchor(
                 ax=self.ax,
                 dimension=dimension,
@@ -240,7 +287,14 @@ class CFDL_Line:
 
 
 class CFDL_Line_Drawer:
+    """Configure and draw framed category-level labels for line charts."""
+
     def __init__(self, ax: Axes, fig: Figure):
+        """
+        Args:
+            ax (Axes): Target axes that already contains line artists.
+            fig (Figure): Figure used for measurement and conversion.
+        """
         self.ax = ax
         self.fig = fig
 
@@ -253,13 +307,13 @@ class CFDL_Line_Drawer:
         self._label_h_align: FDL_Label_HAlign = "center"
         self._label_v_align: FDL_Label_VAlign = "center"
 
-        # Label pad properties
+        # Label pad properties (points)
         self._pad_left: float | None = None
         self._pad_right: float | None = None
         self._pad_top: float | None = None
         self._pad_bottom: float | None = None
 
-        # Frame properties
+        # Frame properties (units are points where applicable)
         self._frame_face_color: str | None = "#FFFFFF"
         self._frame_face_alpha: float = 1.0
         self._frame_border_color: str = "#000000"
@@ -270,7 +324,7 @@ class CFDL_Line_Drawer:
         self._frame_custom_width: float | None = None
         self._frame_custom_height: float | None = None
 
-        # Frame align properties
+        # Frame align properties (offsets are points)
         self._frame_x_offset: float = 0.0
         self._frame_y_offset: float = 0.0
 
@@ -287,6 +341,19 @@ class CFDL_Line_Drawer:
         size: int = 10,
         color: str = "#000000",
     ) -> "CFDL_Line_Drawer":
+        """Set label font properties.
+
+        Args:
+            font (FontProperties | None): Font style. If None, Matplotlib
+                defaults are used.
+            size (int | None): Font size. If None, Matplotlib defaults
+                are used.
+            color (str | None): Font color. If None, Matplotlib defaults
+                are used.
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._label_font = font
         self._label_size = size
         self._label_color = color
@@ -297,6 +364,17 @@ class CFDL_Line_Drawer:
         h_align: FDL_Label_HAlign = "center",
         v_align: FDL_Label_VAlign = "center",
     ) -> "CFDL_Line_Drawer":
+        """Set text alignment inside the frame.
+
+        Args:
+            h_align (FDL_Label_HAlign): Horizontal alignment inside the frame.
+                Options: "left", "right", "center".
+            v_align (FDL_Label_VAlign): Vertical alignment inside the frame.
+                Options: "top", "bottom", "center".
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._label_h_align = h_align
         self._label_v_align = v_align
         return self
@@ -308,6 +386,20 @@ class CFDL_Line_Drawer:
         top: float | None = None,
         bottom: float | None = None,
     ) -> "CFDL_Line_Drawer":
+        """Set padding between the frame and the label text.
+
+        All padding values are interpreted as points and converted into data
+        units at draw time.
+
+        Args:
+            left (float | None): Left padding.
+            right (float | None): Right padding.
+            top (float | None): Top padding.
+            bottom (float | None): Bottom padding.
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._pad_left = left
         self._pad_right = right
         self._pad_top = top
@@ -326,6 +418,22 @@ class CFDL_Line_Drawer:
         custom_width: float | None = None,
         custom_height: float | None = None,
     ) -> "CFDL_Line_Drawer":
+        """Set framed label background properties.
+
+        Args:
+            face_color (str): Fill color for the frame.
+            face_alpha (float): Fill alpha in [0.0, 1.0].
+            border_color (str): Border color for the frame.
+            border_alpha (float): Border alpha in [0.0, 1.0].
+            border_style (str): Border linestyle string (e.g. "-", "--", ":").
+            border_width (float): Border width.
+            border_radius (float): Corner radius.
+            custom_width (float | None): Optional override for auto width.
+            custom_height (float | None): Optional override for auto height.
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._frame_face_color = face_color
         self._frame_face_alpha = face_alpha
         self._frame_border_color = border_color
@@ -342,6 +450,15 @@ class CFDL_Line_Drawer:
         x_offset: float = 0.0,
         y_offset: float = 0.0,
     ) -> "CFDL_Line_Drawer":
+        """Set frame offsets applied after anchoring.
+
+        Args:
+            x_offset (float): Offset applied from anchor x coordinate.
+            y_offset (float): Offset applied from anchor y coordinate.
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._frame_x_offset = x_offset
         self._frame_y_offset = y_offset
         return self
@@ -354,6 +471,20 @@ class CFDL_Line_Drawer:
         currency: str | None = None,
         scale: ScaleType = "full",
     ) -> "CFDL_Line_Drawer":
+        """Configure numeric formatting for category labels.
+
+        Args:
+            format_type (NumberFormat): Numeric formatting mode.
+                Options: "number", "percent".
+            decimals (int): Number of decimal places to display.
+            separator (bool): Whether to use thousands separators.
+            currency (str | None): Optional currency symbol/code.
+            scale (ScaleType): Scaling mode for large numbers.
+                Options: "k", "m", "b", "t", "full", "auto".
+
+        Returns:
+            CFDL_Line_Drawer: The current instance for method chaining.
+        """
         self._format_type = format_type
         self._decimals = decimals
         self._separator = separator
@@ -366,8 +497,24 @@ class CFDL_Line_Drawer:
         custom_label: dict[str, float] | None = None,
         clear: bool = True,
     ) -> None:
+        """Draw framed category labels onto the Axes.
+
+        Args:
+            custom_label (dict[str, float] | None): Optional mapping from tick
+                label text to the numeric value to display. When None, totals
+                are computed from line data via CDL_Line_Totals.
+            clear (bool): If True, remove existing labels previously drawn by
+                this drawer (identified by gid "LineCategoryFramedDataLabel_Label"
+                and "LineCategoryFramedDataLabel_Frame").
+
+        Notes:
+            This method mutates the Axes by removing and adding artists. It
+            does not return self (not chainable).
+        """
         helper = LineStyleHelper(ax=self.ax)
+
         if clear:
+            # Remove prior framed category labels created by this module.
             for label in self.ax.texts[:]:
                 if label.get_gid() == "LineCategoryFramedDataLabel_Label":
                     label.remove()

@@ -1,58 +1,72 @@
-import matplotlib.font_manager as fm
+"""Utilities for font management."""
+
 from pathlib import Path
+
+import matplotlib.font_manager as fm
 
 
 class Fonts:
-    """
-    Utility class to load and register custom fonts for Matplotlib.
-
-    This class simplifies loading and managing custom font files using
-    Matplotlib's `font_manager`. Fonts can be added from a directory and
-    accessed later via named attributes or through the `properties` dictionary.
-    """
+    """Utility class to load and register custom fonts for Matplotlib."""
 
     def __init__(self) -> None:
+        """Initialize an empty font registry."""
         self.properties: dict[str, fm.FontProperties] = {}
 
     @classmethod
     def load(cls, path: str, fonts: dict[str, str]) -> "Fonts":
-        """
-        Load and register custom fonts from a directory.
+        """Load and register multiple font files from a directory.
 
-        Parameters
-        ----------
-        path : str
-            Path to the directory containing font files.
-        fonts : dict[str, str]
-            Mapping of font names to font filenames. Each key represents a
-            user-defined font name, and each value is the corresponding filename.
+        Args:
+            path: Path to the directory containing font files.
+            fonts: Mapping of font names to font filenames.
 
-        Returns
-        -------
-        Fonts
-            A Fonts instance with loaded font properties.
+        Returns:
+            Fonts: A populated ``Fonts`` instance with registered fonts.
         """
         instance = cls()
-        for name, file in fonts.items():
-            instance._add(name, Path(path) / file)
+        base_path = Path(path)
+
+        for name, filename in fonts.items():
+            instance._add(name=name, path=base_path / filename)
+
         return instance
 
     def _add(self, name: str, path: Path) -> fm.FontProperties:
-        """Register a single font file under a name and return its properties."""
+        """Register a single font file under a given name.
 
+        Args:
+            name: User-facing font name.
+            path: Full path to the font file.
+
+        Returns:
+            matplotlib.font_manager.FontProperties: Registered font properties.
+        """
         path = Path(path)
-        fm.fontManager.addfont(str(path))
-        property = fm.FontProperties(fname=path)
-        self.properties[name] = property
-        setattr(self, name, property)
-        return property
+
+        fm.fontManager.addfont(str(path))  # type: ignore[attr-defined]
+        font_properties = fm.FontProperties(fname=path)
+
+        self.properties[name] = font_properties
+        setattr(self, name, font_properties)
+
+        return font_properties
 
     def __getattr__(self, name: str) -> fm.FontProperties:
-        """Get font properties by name, raising AttributeError if not found."""
+        """Retrieve font properties by attribute access.
 
+        Args:
+            name: Font name.
+
+        Returns:
+            matplotlib.font_manager.FontProperties: Font properties for the
+            requested font.
+
+        Raises:
+            AttributeError: If the font name does not exist.
+        """
         try:
             return self.properties[name]
-        except KeyError:
+        except KeyError as exc:
             raise AttributeError(
                 f"No such font name: {name!r}. Available: {list(self.properties)}"
-            )
+            ) from exc
